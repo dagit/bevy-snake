@@ -1,0 +1,33 @@
+[package]
+name = "snake"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rand = "0.8.5"
+
+[dependencies.bevy]
+version = "0.15"
+
+# This is here beacuse of a severe limitation in cargo.
+# To make a release build you MUST disable the fast-compile
+# feature, like this:
+#   cargo build --release --no-default-features
+[features]
+default = ["fast-compile"]
+fast-compile = ["bevy/dynamic_linking"]
+
+[profile.dev.package."*"]
+opt-level = 3
+debug = false
+
+[profile.dev]
+opt-level = 3
+
+[profile.release]
+strip = true
+lto = "thin"
+codegen-units = 1
+
