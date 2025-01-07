@@ -26,6 +26,7 @@ fn main() {
                 input_direction,
                 move_snake,
                 spawn_food,
+                animate_food,
                 wall_collision_check,
                 self_collision_check,
                 food_collision_check,
@@ -417,14 +418,29 @@ fn spawn_food(
                 return;
             }
         }
+        let food = Name::new("food");
+
         commands.spawn((
-            Name::new("food"),
+            food,
             Food,
             CleanupOnRestart,
             Transform::from_xyz(x, y, 0.0),
             Mesh2d(meshes.add(Rectangle::new(SEGMENT_SIZE, SEGMENT_SIZE))),
             MeshMaterial2d(materials.add(ColorMaterial::from_color(FOOD_COLOR))),
         ));
+    }
+}
+
+fn animate_food(
+    material_handles: Query<&MeshMaterial2d<ColorMaterial>, With<Food>>,
+    time: Res<Time>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+) {
+    for material_handle in material_handles.iter() {
+        if let Some(material) = materials.get_mut(material_handle) {
+            let hsla: Hsla = material.color.into();
+            *material = ColorMaterial::from_color(hsla.rotate_hue(time.delta_secs() * 100.0));
+        }
     }
 }
 
