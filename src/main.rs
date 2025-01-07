@@ -1,4 +1,7 @@
-use bevy::prelude::*;
+use bevy::{
+    animation::{animated_field, AnimationTarget, AnimationTargetId},
+    prelude::*,
+};
 use std::collections::VecDeque;
 
 fn main() {
@@ -393,6 +396,8 @@ fn spawn_food(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
+    mut animations: ResMut<Assets<AnimationClip>>,
+    mut graphs: ResMut<Assets<AnimationGraph>>,
     segment_transform: Query<&Transform>,
     windows: Query<&mut Window>,
 ) {
@@ -420,14 +425,40 @@ fn spawn_food(
         }
         let food = Name::new("food");
 
-        commands.spawn((
-            food,
-            Food,
-            CleanupOnRestart,
-            Transform::from_xyz(x, y, 0.0),
-            Mesh2d(meshes.add(Rectangle::new(SEGMENT_SIZE, SEGMENT_SIZE))),
-            MeshMaterial2d(materials.add(ColorMaterial::from_color(FOOD_COLOR))),
-        ));
+        let mut animation = AnimationClip::default();
+        let food_animation_target_id = AnimationTargetId::from_name(&food);
+        animation.add_curve_to_target(
+            food_animation_target_id,
+            AnimatableCurve::new(
+                animated_field!(Transform::scale),
+                UnevenSampleAutoCurve::new([0.0, 1.0, 2.0].into_iter().zip([
+                    Vec3::splat(0.5),
+                    Vec3::splat(1.0),
+                    Vec3::splat(0.5),
+                ]))
+                .unwrap(),
+            ),
+        );
+        let (graph, animation_index) = AnimationGraph::from_clip(animations.add(animation));
+        let mut animation_player = AnimationPlayer::default();
+        animation_player.play(animation_index).repeat();
+
+        let food_id = commands
+            .spawn((
+                food,
+                Food,
+                CleanupOnRestart,
+                Transform::from_xyz(x, y, 0.0),
+                Mesh2d(meshes.add(Rectangle::new(SEGMENT_SIZE, SEGMENT_SIZE))),
+                MeshMaterial2d(materials.add(ColorMaterial::from_color(FOOD_COLOR))),
+                AnimationGraphHandle(graphs.add(graph)),
+                animation_player,
+            ))
+            .id();
+        commands.entity(food_id).insert(AnimationTarget {
+            id: food_animation_target_id,
+            player: food_id,
+        });
     }
 }
 
