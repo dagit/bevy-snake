@@ -332,9 +332,11 @@ fn add_snake(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut commands: Commands,
+    start_sound: Res<StartSound>,
 ) {
     let snake = SnakeBundle::new(&mut meshes, &mut materials, &mut commands);
     commands.spawn((Name::new("snake"), CleanupOnRestart, snake));
+    commands.spawn(AudioPlayer(start_sound.0.clone()));
 }
 
 fn setup_camera(mut commands: Commands) {
@@ -585,11 +587,14 @@ fn self_collision_check(
 }
 
 fn game_over_check(
+    mut commands: Commands,
     mut game_over_reader: EventReader<GameOverEvent>,
     mut next_state: ResMut<NextState<GameState>>,
+    crash_sound: Res<CrashSound>,
 ) {
     if game_over_reader.read().next().is_some() {
         next_state.set(GameState::GameOver);
+        commands.spawn(AudioPlayer(crash_sound.0.clone()));
     }
 }
 
@@ -597,10 +602,18 @@ fn game_over_check(
 pub struct EatSound(Handle<AudioSource>);
 #[derive(Resource)]
 pub struct MenuRolloverSound(Handle<AudioSource>);
+#[derive(Resource)]
+pub struct CrashSound(Handle<AudioSource>);
+#[derive(Resource)]
+pub struct StartSound(Handle<AudioSource>);
 
 fn load_audio(mut commands: Commands, server: Res<AssetServer>) {
     let handle: Handle<AudioSource> = server.load("eat.wav");
     commands.insert_resource(EatSound(handle));
     let handle: Handle<AudioSource> = server.load("menu-rollover.wav");
     commands.insert_resource(MenuRolloverSound(handle));
+    let handle: Handle<AudioSource> = server.load("crash.wav");
+    commands.insert_resource(CrashSound(handle));
+    let handle: Handle<AudioSource> = server.load("start.wav");
+    commands.insert_resource(StartSound(handle));
 }
