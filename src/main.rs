@@ -1,9 +1,6 @@
 use bevy::{
     animation::{animated_field, AnimationTarget, AnimationTargetId},
-    core_pipeline::{
-        bloom::{Bloom, BloomCompositeMode},
-        tonemapping::Tonemapping,
-    },
+    core_pipeline::{bloom::Bloom, tonemapping::Tonemapping},
     prelude::*,
 };
 use std::collections::VecDeque;
@@ -19,7 +16,7 @@ fn main() {
             TimerMode::Repeating,
         )))
         .init_state::<GameState>()
-        .add_systems(Startup, setup_camera)
+        .add_systems(Startup, (setup_camera, load_audio))
         .add_systems(OnEnter(GameState::Menu), setup_menu)
         .add_systems(Update, menu.run_if(in_state(GameState::Menu)))
         .add_systems(OnExit(GameState::Menu), cleanup_menu)
@@ -227,12 +224,14 @@ fn setup_menu(mut commands: Commands) {
 }
 
 fn menu(
+    mut commands: Commands,
     mut next_state: ResMut<NextState<GameState>>,
     mut interaction_query: Query<
         (&Interaction, &mut BackgroundColor),
         (Changed<Interaction>, With<Button>),
     >,
     keys: Res<ButtonInput<KeyCode>>,
+    menu_sound: Res<MenuRolloverSound>,
 ) {
     for (interaction, mut color) in &mut interaction_query {
         match *interaction {
@@ -242,6 +241,7 @@ fn menu(
             }
             Interaction::Hovered => {
                 *color = HOVERED_BUTTON.into();
+                commands.spawn(AudioPlayer(menu_sound.0.clone()));
             }
             Interaction::None => {
                 *color = NORMAL_BUTTON.into();
@@ -295,12 +295,14 @@ fn setup_game_over(mut commands: Commands) {
 }
 
 fn game_over(
+    mut commands: Commands,
     mut next_state: ResMut<NextState<GameState>>,
     mut interaction_query: Query<
         (&Interaction, &mut BackgroundColor),
         (Changed<Interaction>, With<Button>),
     >,
     keys: Res<ButtonInput<KeyCode>>,
+    menu_sound: Res<MenuRolloverSound>,
 ) {
     for (interaction, mut color) in &mut interaction_query {
         match *interaction {
@@ -310,6 +312,7 @@ fn game_over(
             }
             Interaction::Hovered => {
                 *color = HOVERED_BUTTON.into();
+                commands.spawn(AudioPlayer(menu_sound.0.clone()));
             }
             Interaction::None => {
                 *color = NORMAL_BUTTON.into();
@@ -513,10 +516,13 @@ fn food_collision_check(
 }
 
 fn grow(
+    mut commands: Commands,
+    eat_sound: Res<EatSound>,
     mut food_collision_reader: EventReader<FoodCollisionEvent>,
     mut snake: Query<&mut Length, With<PlayerControlled>>,
 ) {
     if food_collision_reader.read().next().is_some() {
+        commands.spawn(AudioPlayer(eat_sound.0.clone()));
         for mut len in &mut snake {
             let Length(l) = *len;
             *len = Length(l + 10);
@@ -585,4 +591,16 @@ fn game_over_check(
     if game_over_reader.read().next().is_some() {
         next_state.set(GameState::GameOver);
     }
+}
+
+#[derive(Resource)]
+pub struct EatSound(Handle<AudioSource>);
+#[derive(Resource)]
+pub struct MenuRolloverSound(Handle<AudioSource>);
+
+fn load_audio(mut commands: Commands, server: Res<AssetServer>) {
+    let handle: Handle<AudioSource> = server.load("eat.wav");
+    commands.insert_resource(EatSound(handle));
+    let handle: Handle<AudioSource> = server.load("menu-rollover.wav");
+    commands.insert_resource(MenuRolloverSound(handle));
 }

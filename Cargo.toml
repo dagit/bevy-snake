@@ -10,6 +10,7 @@ rand = "0.8.5"
 
 [dependencies.bevy]
 version = "0.15"
+features = ["wav"]
 
 # This is here beacuse of a severe limitation in cargo.
 # To make a release build you MUST disable the fast-compile
