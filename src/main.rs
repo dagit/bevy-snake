@@ -17,17 +17,21 @@ fn main() {
         )))
         .init_state::<GameState>()
         .add_systems(Startup, (setup_camera, load_audio))
+        // Main menu
         .add_systems(OnEnter(GameState::Menu), setup_menu)
         .add_systems(Update, menu.run_if(in_state(GameState::Menu)))
         .add_systems(OnExit(GameState::Menu), cleanup_menu)
+        // Clean slate
         .add_systems(
-            OnEnter(GameState::InGame),
+            OnEnter(GameState::StartGame),
             (cleanup_system::<CleanupOnRestart>, add_snake).chain(),
         )
+        // Main game play loop
         .add_systems(
             Update,
             (
                 input_direction,
+                input_pause,
                 move_snake,
                 spawn_food,
                 animate_food,
@@ -40,6 +44,11 @@ fn main() {
                 .chain()
                 .run_if(in_state(GameState::InGame)),
         )
+        // Paused
+        .add_systems(OnEnter(GameState::Pause), setup_pause)
+        .add_systems(Update, paused.run_if(in_state(GameState::Pause)))
+        .add_systems(OnExit(GameState::Pause), cleanup_pause)
+        // Game Over
         .add_systems(OnEnter(GameState::GameOver), setup_game_over)
         .add_systems(Update, game_over.run_if(in_state(GameState::GameOver)))
         .add_systems(OnExit(GameState::GameOver), cleanup_game_over)
@@ -50,12 +59,19 @@ fn main() {
 enum GameState {
     #[default]
     Menu,
+    StartGame,
     InGame,
+    Pause,
     GameOver,
 }
 
 #[derive(Resource)]
 struct MenuData {
+    button: Entity,
+}
+
+#[derive(Resource)]
+struct PauseData {
     button: Entity,
 }
 
@@ -237,7 +253,7 @@ fn menu(
         match *interaction {
             Interaction::Pressed => {
                 *color = PRESSED_BUTTON.into();
-                next_state.set(GameState::InGame);
+                next_state.set(GameState::StartGame);
             }
             Interaction::Hovered => {
                 *color = HOVERED_BUTTON.into();
@@ -249,7 +265,7 @@ fn menu(
         }
     }
     if keys.just_pressed(KeyCode::Space) || keys.just_pressed(KeyCode::Enter) {
-        next_state.set(GameState::InGame);
+        next_state.set(GameState::StartGame);
     }
 }
 
@@ -308,7 +324,7 @@ fn game_over(
         match *interaction {
             Interaction::Pressed => {
                 *color = PRESSED_BUTTON.into();
-                next_state.set(GameState::InGame);
+                next_state.set(GameState::StartGame);
             }
             Interaction::Hovered => {
                 *color = HOVERED_BUTTON.into();
@@ -320,7 +336,7 @@ fn game_over(
         }
     }
     if keys.just_pressed(KeyCode::Space) || keys.just_pressed(KeyCode::Enter) {
-        next_state.set(GameState::InGame);
+        next_state.set(GameState::StartGame);
     }
 }
 
@@ -328,15 +344,91 @@ fn cleanup_game_over(mut commands: Commands, game_over_data: Res<GameOverData>) 
     commands.entity(game_over_data.button).despawn_recursive();
 }
 
+fn setup_pause(mut commands: Commands) {
+    let button = commands
+        .spawn(Node {
+            width: Val::Percent(100.),
+            height: Val::Percent(100.),
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            ..default()
+        })
+        .with_children(|parent| {
+            parent
+                .spawn((
+                    Button,
+                    Node {
+                        width: Val::Px(150.),
+                        height: Val::Px(65.),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        ..default()
+                    },
+                    BackgroundColor(NORMAL_BUTTON),
+                ))
+                .with_children(|parent| {
+                    parent.spawn((
+                        Text::new("Unpause"),
+                        TextFont {
+                            font_size: 33.0,
+                            ..default()
+                        },
+                        TextColor(Color::srgb(0.9, 0.9, 0.9)),
+                    ));
+                });
+        })
+        .id();
+    commands.insert_resource(PauseData { button });
+}
+
+fn paused(
+    mut commands: Commands,
+    mut next_state: ResMut<NextState<GameState>>,
+    mut interaction_query: Query<
+        (&Interaction, &mut BackgroundColor),
+        (Changed<Interaction>, With<Button>),
+    >,
+    keys: Res<ButtonInput<KeyCode>>,
+    menu_sound: Res<MenuRolloverSound>,
+) {
+    for (interaction, mut color) in &mut interaction_query {
+        match *interaction {
+            Interaction::Pressed => {
+                *color = PRESSED_BUTTON.into();
+                next_state.set(GameState::InGame);
+            }
+            Interaction::Hovered => {
+                *color = HOVERED_BUTTON.into();
+                commands.spawn(AudioPlayer(menu_sound.0.clone()));
+            }
+            Interaction::None => {
+                *color = NORMAL_BUTTON.into();
+            }
+        }
+    }
+    if keys.just_pressed(KeyCode::Space)
+        || keys.just_pressed(KeyCode::Enter)
+        || keys.just_pressed(KeyCode::Escape)
+    {
+        next_state.set(GameState::InGame);
+    }
+}
+
+fn cleanup_pause(mut commands: Commands, pause_data: Res<PauseData>) {
+    commands.entity(pause_data.button).despawn_recursive();
+}
+
 fn add_snake(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut commands: Commands,
+    mut next_state: ResMut<NextState<GameState>>,
     start_sound: Res<StartSound>,
 ) {
     let snake = SnakeBundle::new(&mut meshes, &mut materials, &mut commands);
     commands.spawn((Name::new("snake"), CleanupOnRestart, snake));
     commands.spawn(AudioPlayer(start_sound.0.clone()));
+    next_state.set(GameState::InGame);
 }
 
 fn setup_camera(mut commands: Commands) {
@@ -404,6 +496,12 @@ fn input_direction(
         } else if keys.just_pressed(KeyCode::ArrowDown) && *dir != Direction::North {
             *dir = Direction::South;
         }
+    }
+}
+
+fn input_pause(keys: Res<ButtonInput<KeyCode>>, mut next_state: ResMut<NextState<GameState>>) {
+    if keys.just_pressed(KeyCode::Escape) {
+        next_state.set(GameState::Pause);
     }
 }
 
