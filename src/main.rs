@@ -1,8 +1,10 @@
+use bevy::app::AppExit;
 use bevy::{
     animation::{animated_field, AnimationTarget, AnimationTargetId},
     core_pipeline::{bloom::Bloom, tonemapping::Tonemapping},
     prelude::*,
 };
+
 use std::collections::VecDeque;
 
 fn main() {
@@ -50,7 +52,10 @@ fn main() {
         .add_systems(OnExit(GameState::Pause), cleanup_pause)
         // Game Over
         .add_systems(OnEnter(GameState::GameOver), setup_game_over)
-        .add_systems(Update, game_over.run_if(in_state(GameState::GameOver)))
+        .add_systems(
+            Update,
+            (game_over_retry_button, game_over_quit_button).run_if(in_state(GameState::GameOver)),
+        )
         .add_systems(OnExit(GameState::GameOver), cleanup_game_over)
         .run();
 }
@@ -77,7 +82,7 @@ struct PauseData {
 
 #[derive(Resource)]
 struct GameOverData {
-    button: Entity,
+    buttons: Entity,
 }
 
 #[derive(Event)]
@@ -273,18 +278,25 @@ fn cleanup_menu(mut commands: Commands, menu_data: Res<MenuData>) {
     commands.entity(menu_data.button).despawn_recursive();
 }
 
+#[derive(Component)]
+pub struct RetryButton;
+#[derive(Component)]
+pub struct QuitButton;
+
 fn setup_game_over(mut commands: Commands) {
-    let button = commands
+    let buttons = commands
         .spawn(Node {
             width: Val::Percent(100.),
             height: Val::Percent(100.),
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
+            flex_direction: FlexDirection::Column,
             ..default()
         })
         .with_children(|parent| {
             parent
                 .spawn((
+                    RetryButton,
                     Button,
                     Node {
                         width: Val::Px(150.),
@@ -305,17 +317,40 @@ fn setup_game_over(mut commands: Commands) {
                         TextColor(Color::srgb(0.9, 0.9, 0.9)),
                     ));
                 });
+            parent
+                .spawn((
+                    QuitButton,
+                    Button,
+                    Node {
+                        width: Val::Px(150.),
+                        height: Val::Px(65.),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        ..default()
+                    },
+                    BackgroundColor(NORMAL_BUTTON),
+                ))
+                .with_children(|parent| {
+                    parent.spawn((
+                        Text::new("Quit"),
+                        TextFont {
+                            font_size: 33.0,
+                            ..default()
+                        },
+                        TextColor(Color::srgb(0.9, 0.9, 0.9)),
+                    ));
+                });
         })
         .id();
-    commands.insert_resource(GameOverData { button });
+    commands.insert_resource(GameOverData { buttons });
 }
 
-fn game_over(
+fn game_over_retry_button(
     mut commands: Commands,
     mut next_state: ResMut<NextState<GameState>>,
     mut interaction_query: Query<
         (&Interaction, &mut BackgroundColor),
-        (Changed<Interaction>, With<Button>),
+        (Changed<Interaction>, With<RetryButton>),
     >,
     keys: Res<ButtonInput<KeyCode>>,
     menu_sound: Res<MenuRolloverSound>,
@@ -340,8 +375,34 @@ fn game_over(
     }
 }
 
+fn game_over_quit_button(
+    mut commands: Commands,
+    mut interaction_query: Query<
+        (&Interaction, &mut BackgroundColor),
+        (Changed<Interaction>, With<QuitButton>),
+    >,
+    menu_sound: Res<MenuRolloverSound>,
+    mut exit: EventWriter<AppExit>,
+) {
+    for (interaction, mut color) in &mut interaction_query {
+        match *interaction {
+            Interaction::Pressed => {
+                *color = PRESSED_BUTTON.into();
+                exit.send(AppExit::Success);
+            }
+            Interaction::Hovered => {
+                *color = HOVERED_BUTTON.into();
+                commands.spawn(AudioPlayer(menu_sound.0.clone()));
+            }
+            Interaction::None => {
+                *color = NORMAL_BUTTON.into();
+            }
+        }
+    }
+}
+
 fn cleanup_game_over(mut commands: Commands, game_over_data: Res<GameOverData>) {
-    commands.entity(game_over_data.button).despawn_recursive();
+    commands.entity(game_over_data.buttons).despawn_recursive();
 }
 
 fn setup_pause(mut commands: Commands) {
