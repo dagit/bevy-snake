@@ -1,5 +1,9 @@
 use bevy::{
     animation::{animated_field, AnimationTarget, AnimationTargetId},
+    core_pipeline::{
+        bloom::{Bloom, BloomCompositeMode},
+        tonemapping::Tonemapping,
+    },
     prelude::*,
 };
 use std::collections::VecDeque;
@@ -331,7 +335,15 @@ fn add_snake(
 }
 
 fn setup_camera(mut commands: Commands) {
-    commands.spawn(Camera2d);
+    commands.spawn((
+        Camera2d,
+        Camera {
+            hdr: true,
+            ..default()
+        },
+        Tonemapping::TonyMcMapface,
+        Bloom::default(),
+    ));
 }
 
 fn move_snake(
