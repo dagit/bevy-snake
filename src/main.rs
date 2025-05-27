@@ -580,61 +580,62 @@ fn spawn_food(
     if timer.0.tick(time.delta()).just_finished() {
         use rand::Rng;
         let mut rng = rand::thread_rng();
-        let window = windows.single();
-        let width = window.resolution.width();
-        let height = window.resolution.height();
-        let x_uniform = rand::distributions::Uniform::new_inclusive(
-            -width / SEGMENT_SIZE / 2.,
-            width / SEGMENT_SIZE / 2.,
-        );
-        let y_uniform = rand::distributions::Uniform::new_inclusive(
-            -height / SEGMENT_SIZE / 2.,
-            height / SEGMENT_SIZE / 2.,
-        );
-        let x = (rng.sample(x_uniform).round() * SEGMENT_SIZE).round();
-        let y = (rng.sample(y_uniform).round() * SEGMENT_SIZE).round();
-        for segment in &segment_transform {
-            // Don't place the food on top of the snek
-            if segment.translation.x == x && segment.translation.y == y {
-                return;
+        for window in windows.into_iter() {
+            let width = window.resolution.width();
+            let height = window.resolution.height();
+            let x_uniform = rand::distributions::Uniform::new_inclusive(
+                -width / SEGMENT_SIZE / 2.,
+                width / SEGMENT_SIZE / 2.,
+            );
+            let y_uniform = rand::distributions::Uniform::new_inclusive(
+                -height / SEGMENT_SIZE / 2.,
+                height / SEGMENT_SIZE / 2.,
+            );
+            let x = (rng.sample(x_uniform).round() * SEGMENT_SIZE).round();
+            let y = (rng.sample(y_uniform).round() * SEGMENT_SIZE).round();
+            for segment in &segment_transform {
+                // Don't place the food on top of the snek
+                if segment.translation.x == x && segment.translation.y == y {
+                    return;
+                }
             }
+            let food = Name::new("food");
+
+            let mut animation = AnimationClip::default();
+            let food_animation_target_id = AnimationTargetId::from_name(&food);
+            animation.add_curve_to_target(
+                food_animation_target_id,
+                AnimatableCurve::new(
+                    animated_field!(Transform::scale),
+                    UnevenSampleAutoCurve::new([0.0, 1.0, 2.0].into_iter().zip([
+                        Vec3::splat(0.5),
+                        Vec3::splat(1.0),
+                        Vec3::splat(0.5),
+                    ]))
+                    .unwrap(),
+                ),
+            );
+            let (graph, animation_index) = AnimationGraph::from_clip(animations.add(animation));
+            let mut animation_player = AnimationPlayer::default();
+            animation_player.play(animation_index).repeat();
+
+            let food_id = commands
+                .spawn((
+                    food,
+                    Food,
+                    CleanupOnRestart,
+                    Transform::from_xyz(x, y, 0.0),
+                    Mesh2d(meshes.add(Rectangle::new(SEGMENT_SIZE, SEGMENT_SIZE))),
+                    MeshMaterial2d(materials.add(ColorMaterial::from_color(FOOD_COLOR))),
+                    AnimationGraphHandle(graphs.add(graph)),
+                    animation_player,
+                ))
+                .id();
+            commands.entity(food_id).insert(AnimationTarget {
+                id: food_animation_target_id,
+                player: food_id,
+            });
         }
-        let food = Name::new("food");
-
-        let mut animation = AnimationClip::default();
-        let food_animation_target_id = AnimationTargetId::from_name(&food);
-        animation.add_curve_to_target(
-            food_animation_target_id,
-            AnimatableCurve::new(
-                animated_field!(Transform::scale),
-                UnevenSampleAutoCurve::new([0.0, 1.0, 2.0].into_iter().zip([
-                    Vec3::splat(0.5),
-                    Vec3::splat(1.0),
-                    Vec3::splat(0.5),
-                ]))
-                .unwrap(),
-            ),
-        );
-        let (graph, animation_index) = AnimationGraph::from_clip(animations.add(animation));
-        let mut animation_player = AnimationPlayer::default();
-        animation_player.play(animation_index).repeat();
-
-        let food_id = commands
-            .spawn((
-                food,
-                Food,
-                CleanupOnRestart,
-                Transform::from_xyz(x, y, 0.0),
-                Mesh2d(meshes.add(Rectangle::new(SEGMENT_SIZE, SEGMENT_SIZE))),
-                MeshMaterial2d(materials.add(ColorMaterial::from_color(FOOD_COLOR))),
-                AnimationGraphHandle(graphs.add(graph)),
-                animation_player,
-            ))
-            .id();
-        commands.entity(food_id).insert(AnimationTarget {
-            id: food_animation_target_id,
-            player: food_id,
-        });
     }
 }
 
@@ -697,23 +698,24 @@ fn wall_collision_check(
     segments: Query<(&Segments, &Length), With<PlayerControlled>>,
     windows: Query<&Window>,
 ) {
-    let window = windows.single();
-    let width = window.resolution.width();
-    let height = window.resolution.height();
-    for (segments, len) in &segments {
-        // TODO: can I just make this peek the back?
-        let head_idx = if len.0 as usize <= segments.0.len() {
-            len.0.saturating_sub(1) as usize
-        } else {
-            segments.0.len() - 1
-        };
-        let head_transform = *segment_transform.get(segments.0[head_idx]).unwrap();
-        if head_transform.translation.x > width / 2.
-            || head_transform.translation.x < -width / 2.
-            || head_transform.translation.y > height / 2.
-            || head_transform.translation.y < -height / 2.
-        {
-            game_over_writer.send(GameOverEvent);
+    for window in windows.into_iter() {
+        let width = window.resolution.width();
+        let height = window.resolution.height();
+        for (segments, len) in &segments {
+            // TODO: can I just make this peek the back?
+            let head_idx = if len.0 as usize <= segments.0.len() {
+                len.0.saturating_sub(1) as usize
+            } else {
+                segments.0.len() - 1
+            };
+            let head_transform = *segment_transform.get(segments.0[head_idx]).unwrap();
+            if head_transform.translation.x > width / 2.
+                || head_transform.translation.x < -width / 2.
+                || head_transform.translation.y > height / 2.
+                || head_transform.translation.y < -height / 2.
+            {
+                game_over_writer.send(GameOverEvent);
+            }
         }
     }
 }
