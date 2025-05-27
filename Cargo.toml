@@ -9,7 +9,7 @@ edition = "2021"
 rand = "0.8.5"
 
 [dependencies.bevy]
-version = "0.15"
+version = "0.16"
 features = ["wav"]
 
 # This is here beacuse of a severe limitation in cargo.

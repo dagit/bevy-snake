@@ -1,3 +1,5 @@
+#![allow(clippy::type_complexity)]
+#![allow(clippy::too_many_arguments)]
 use bevy::app::AppExit;
 use bevy::{
     animation::{animated_field, AnimationTarget, AnimationTargetId},
@@ -179,7 +181,7 @@ struct CleanupOnRestart;
 
 fn cleanup_system<T: Component>(mut commands: Commands, q: Query<Entity, With<T>>) {
     for e in &q {
-        commands.entity(e).despawn_recursive();
+        commands.entity(e).despawn();
     }
 }
 
@@ -275,7 +277,7 @@ fn menu(
 }
 
 fn cleanup_menu(mut commands: Commands, menu_data: Res<MenuData>) {
-    commands.entity(menu_data.button).despawn_recursive();
+    commands.entity(menu_data.button).despawn();
 }
 
 #[derive(Component)]
@@ -388,7 +390,7 @@ fn game_over_quit_button(
         match *interaction {
             Interaction::Pressed => {
                 *color = PRESSED_BUTTON.into();
-                exit.send(AppExit::Success);
+                exit.write(AppExit::Success);
             }
             Interaction::Hovered => {
                 *color = HOVERED_BUTTON.into();
@@ -402,7 +404,7 @@ fn game_over_quit_button(
 }
 
 fn cleanup_game_over(mut commands: Commands, game_over_data: Res<GameOverData>) {
-    commands.entity(game_over_data.buttons).despawn_recursive();
+    commands.entity(game_over_data.buttons).despawn();
 }
 
 fn setup_pause(mut commands: Commands) {
@@ -476,7 +478,7 @@ fn paused(
 }
 
 fn cleanup_pause(mut commands: Commands, pause_data: Res<PauseData>) {
-    commands.entity(pause_data.button).despawn_recursive();
+    commands.entity(pause_data.button).despawn();
 }
 
 fn add_snake(
@@ -671,7 +673,7 @@ fn food_collision_check(
                 && transform.translation.y == head_transform.translation.y
             {
                 commands.entity(id).despawn();
-                food_collision_writer.send(FoodCollisionEvent);
+                food_collision_writer.write(FoodCollisionEvent);
             }
         }
     }
@@ -714,7 +716,7 @@ fn wall_collision_check(
                 || head_transform.translation.y > height / 2.
                 || head_transform.translation.y < -height / 2.
             {
-                game_over_writer.send(GameOverEvent);
+                game_over_writer.write(GameOverEvent);
             }
         }
     }
@@ -741,7 +743,7 @@ fn self_collision_check(
             if s.translation.x == head_transform.translation.x
                 && s.translation.y == head_transform.translation.y
             {
-                game_over_writer.send(GameOverEvent);
+                game_over_writer.write(GameOverEvent);
             }
         }
     }
